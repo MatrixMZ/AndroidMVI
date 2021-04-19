@@ -1,19 +1,59 @@
 package com.raywenderlich.android.creaturemon.addcreature
 
 import androidx.lifecycle.ViewModel
+import com.raywenderlich.android.creaturemon.allcreatures.AllCreaturesAction
+import com.raywenderlich.android.creaturemon.allcreatures.AllCreaturesIntent
+import com.raywenderlich.android.creaturemon.allcreatures.AllCreaturesViewState
 import com.raywenderlich.android.creaturemon.data.model.CreatureGenerator
 import com.raywenderlich.android.creaturemon.mvibase.MVIViewModel
+import com.raywenderlich.android.creaturemon.util.notOfType
 import io.reactivex.Observable
+import io.reactivex.ObservableTransformer
 import io.reactivex.functions.BiFunction
+import io.reactivex.subjects.PublishSubject
 
 
 class AddCreatureViewModel(private val actionProcessorHolder: AddCreatureProcessorHolder): ViewModel(), MVIViewModel<AddCreatureIntent, AddCreatureViewState> {
+
+    private val intentsSubject:  PublishSubject<AddCreatureIntent> = PublishSubject.create()
+    private val statesObservable: Observable<AddCreatureViewState> = compose()
+    private val intentFilter: ObservableTransformer<AllCreaturesIntent, AllCreaturesIntent>
+        get() = ObservableTransformer { intents ->
+            intents.publish { shared ->
+                Observable.merge(
+                        shared.ofType(AllCreaturesIntent.LoadAllCreaturesIntent::class.java).take(1),
+                        shared.notOfType(AllCreaturesIntent.LoadAllCreaturesIntent::class.java)
+                )
+            }
+        }
+
     override fun processIntents(intents: Observable<AddCreatureIntent>) {
-        TODO("Not yet implemented")
+        intents.subscribe(intentsSubject)
     }
 
-    override fun states(): Observable<AddCreatureViewState> {
-        TODO("Not yet implemented")
+    override fun states(): Observable<AddCreatureViewState> = statesObservable
+
+    private fun compose(): Observable<AddCreatureViewState> {
+        return intentsSubject
+                .map(this::actionFormIntent)
+                .compose(actionProcessorHolder.actionProcessor)
+                .scan(AddCreatureViewState.default(), reducer)
+                .distinctUntilChanged()
+                .replay(1)
+                .autoConnect(0)
+    }
+
+
+    private fun actionFormIntent(intent: AddCreatureIntent): AddCreatureAction {
+        return when (intent) {
+            is AddCreatureIntent.AvatarIntent -> AddCreatureAction.AvatarAction(intent.drawable)
+            is AddCreatureIntent.NameIntent -> AddCreatureAction.NameAction(intent.name)
+            is AddCreatureIntent.IntelligenceIntent -> AddCreatureAction.IntelligenceAction(intent.intelligenceIndex)
+            is AddCreatureIntent.StrengthIntent -> AddCreatureAction.StrengthAction(intent.strengthIndex)
+            is AddCreatureIntent.EnduranceIntent -> AddCreatureAction.EnduranceAction(intent.enduranceIndex)
+            is AddCreatureIntent.SaveIntent -> AddCreatureAction.SaveAction(intent.drawable, intent.name, intent.intelligenceIndex, intent.strengthIndex, intent.enduranceIndex)
+
+        }
     }
 
     companion object {
@@ -135,4 +175,6 @@ class AddCreatureViewModel(private val actionProcessorHolder: AddCreatureProcess
             is AddCreatureResult.SaveResult.Processing -> previousState.copy(isProcessing = true, error = null)
         }
     }
+
+
 }

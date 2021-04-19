@@ -1,20 +1,54 @@
 package com.raywenderlich.android.creaturemon.allcreatures
 
 import androidx.lifecycle.ViewModel
+import com.raywenderlich.android.creaturemon.addcreature.AddCreatureIntent
 import com.raywenderlich.android.creaturemon.mvibase.MVIViewModel
+import com.raywenderlich.android.creaturemon.util.notOfType
 import io.reactivex.Observable
+import io.reactivex.ObservableTransformer
 import io.reactivex.functions.BiFunction
+import io.reactivex.subjects.PublishSubject
 
 
 class AllCreaturesViewModel(
         private val actionProcessorHolder: AllCreaturesProcessorHolder
 ): ViewModel(), MVIViewModel<AllCreaturesIntent, AllCreaturesViewState> {
-    override fun processIntents(intents: Observable<AllCreaturesIntent>) {
-        TODO("Not yet implemented")
+
+    private val intentsSubjects: PublishSubject<AllCreaturesIntent> = PublishSubject.create()
+    private val statesObservable: Observable<AllCreaturesViewState> = compose()
+
+    private val intentFilter: ObservableTransformer<AllCreaturesIntent, AllCreaturesIntent>
+    get() = ObservableTransformer { intents ->
+        intents.publish { shared ->
+            Observable.merge(
+                shared.ofType(AllCreaturesIntent.LoadAllCreaturesIntent::class.java).take(1),
+                shared.notOfType(AllCreaturesIntent.LoadAllCreaturesIntent::class.java)
+            )
+        }
     }
 
-    override fun states(): Observable<AllCreaturesViewState> {
-        TODO("Not yet implemented")
+    override fun processIntents(intents: Observable<AllCreaturesIntent>) {
+        intents.subscribe(intentsSubjects)
+    }
+
+    override fun states(): Observable<AllCreaturesViewState> = statesObservable
+
+    private fun compose(): Observable<AllCreaturesViewState> {
+        return intentsSubjects
+                .compose(intentFilter)
+                .map(this::actionFromIntent)
+                .compose(actionProcessorHolder.actionProcessor)
+                .scan(AllCreaturesViewState.idle(), reducer)
+                .distinctUntilChanged()
+                .replay(1)
+                .autoConnect(0)
+    }
+
+    private fun actionFromIntent(intent: AllCreaturesIntent): AllCreaturesAction {
+        return when (intent) {
+            is AllCreaturesIntent.LoadAllCreaturesIntent -> AllCreaturesAction.LoadAllCreaturesAction
+            is AllCreaturesIntent.ClearAllCreaturesIntent -> AllCreaturesAction.ClearAllCreaturesAction
+        }
     }
 
     companion object {
