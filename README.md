@@ -6,3 +6,4 @@ Andoroid application written in `Kotlin` with `MVI` architecture.
  - MVI Architecture
 
 ## Data structure
+... better not to say
